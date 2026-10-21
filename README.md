@@ -1,270 +1,281 @@
 # Thermomix MCP (TM6)
 
-Serwer MCP do konta Cookidoo. Główny cel: **wziąć dowolny przepis (blog, książka,
-własna głowa), przerobić go na przepis Thermomixa i wgrać na TM6** tak, żeby
-urządzenie prowadziło krok po kroku — jak przy oryginalnych przepisach — i żeby
-został zapisany na koncie.
+An MCP server for a Cookidoo account. Main goal: **take any recipe (blog, book,
+your own idea), convert it into a Thermomix recipe and upload it to a TM6** so
+that the device guides you step by step, like with the original recipes, and the
+recipe stays saved on your account.
 
-## Czego nie da się zrobić
+## What it cannot do
 
-TM6 **nie ma API do sterowania**. Nie ma lokalnego interfejsu, nie ma zdalnego
-startu. Nikt nie wystartuje gotowania ani nie ustawi temperatury z zewnątrz —
-Vorwerk tego nie udostępnia i nie istnieje działający obejście.
+The TM6 has **no control API**. There is no local interface and no remote start.
+Nobody can start cooking or set the temperature from the outside. Vorwerk does
+not expose this, and there is no working workaround.
 
-Najbliżej „sterowania" jest to, co robi ten serwer: przepis z gotowymi
-ustawieniami ląduje na ekranie TM6, a Ty tylko potwierdzasz kolejne kroki.
-Czas, temperatura i obroty są już ustawione — nie wklepujesz ich ręcznie.
+The closest thing to "control" is what this server does: a recipe with ready
+settings lands on the TM6 screen and you only confirm each step. Time,
+temperature and speed are already set, so you never type them in by hand.
 
-Dodatkowo da się **podejrzeć** trwające gotowanie (remote monitoring), ale to
-tylko odczyt.
+In addition, a running cook can be **watched** (remote monitoring), but that is
+read-only (and see the TM6 note below).
 
-## Jak to działa
-
-```
-dowolny przepis  ──►  konwersja (model)  ──►  preview_recipe  ──►  create_recipe
-                                                  (podgląd)          (wgranie)
-                                                                         │
-                       TM6: Moje przepisy ──► Utworzone przepisy  ◄──────┘
-```
-
-Przepis trafia na konto Cookidoo i synchronizuje się z TM6, gdy urządzenie jest
-online. Wyłączony Thermomix zobaczy przepis po włączeniu — nic nie trzeba
-wysyłać ręcznie.
-
-### Kluczowy szczegół: „podświetlone" ustawienia
-
-Guided cooking dla własnych przepisów działa na TM6 od oprogramowania 3.0, ale
-**tylko dla ustawień wplecionych w treść kroku** (w edytorze Cookidoo robi się
-to, zaznaczając fragment tekstu i przypisując ustawienia Thermomixa). Krok z
-ustawieniami „obok" tekstu zostaje zwykłym tekstem do przeczytania.
-
-Dlatego serwer robi to automatycznie: podajesz `{"text": "Posiekaj cebulę",
-"time": 5, "speed": "5"}`, a on zapisuje krok jako
-`Posiekaj cebulę — 5 s/obr. 5` z adnotacją przypiętą dokładnie do frazy
-`5 s/obr. 5`. Możesz też podać `slot` i wskazać fragment samodzielnie.
-
-`preview_recipe` pokazuje przed wgraniem, które kroki będą prowadzone, a które
-zostaną tekstem.
-
-## Zawartość
+## How it works
 
 ```
-server.py            serwer MCP — 20 narzędzi + prompt convert_recipe
-login.py             jednorazowe logowanie, zapisuje token
-.env.example         wzór konfiguracji
-tests/handshake.py   test protokołu i konwersji kroków, bez dotykania konta
+any recipe  ──►  conversion (model)  ──►  preview_recipe  ──►  create_recipe
+                                             (preview)            (upload)
+                                                                     │
+                     TM6: My recipes ──► Created recipes  ◄──────────┘
 ```
 
-Test po każdej zmianie w `server.py`:
+The recipe goes to your Cookidoo account and syncs to the TM6 when the device is
+online. A switched-off Thermomix shows the recipe once it is turned on. Nothing
+has to be sent by hand.
+
+### Key detail: "highlighted" settings
+
+Guided cooking for custom recipes works on the TM6 since firmware 3.0, but
+**only for settings woven into the step text** (in the Cookidoo editor you select
+a piece of text and assign Thermomix settings to it). A step with settings
+placed "next to" the text stays plain text to read.
+
+So the server does this automatically: you pass `{"text": "Chop the onion",
+"time": 5, "speed": "5"}` and it stores the step as
+`Chop the onion 5 s/speed 5` with the annotation attached exactly to the phrase
+`5 s/speed 5`. You can also pass `slot` and point at the fragment yourself.
+
+`preview_recipe` shows, before uploading, which steps will be guided and which
+will stay plain text.
+
+## Contents
+
+```
+server.py            MCP server: 20 tools + the convert_recipe prompt
+login.py             one-time login, saves the token
+.env.example         configuration template
+tests/handshake.py   protocol and step-conversion test, never touches the account
+```
+
+Run the test after every change to `server.py`:
 
 ```bash
-cd "<sciezka>\thermomix-mcp" && ./venv/Scripts/python.exe tests/handshake.py
+cd "<path>\thermomix-mcp" && ./venv/Scripts/python.exe tests/handshake.py
 ```
 
-## Instalacja
+## Installation
 
 ```bash
-cd "<sciezka>\thermomix-mcp"
+cd "<path>\thermomix-mcp"
 python -m venv venv
 ./venv/Scripts/python.exe -m pip install -r requirements.txt
 ```
 
-Skopiuj `.env.example` do `.env` i wpisz dane konta Cookidoo. Potem zaloguj się
-raz — token zapisze się w `~/.thermomix-mcp` i serwer będzie go sam odświeżał,
-więc hasło nie musi siedzieć w konfiguracji Claude'a:
+Copy `.env.example` to `.env` and fill in your Cookidoo account details. Then log
+in once. The token is saved in `~/.thermomix-mcp` and the server refreshes it on
+its own, so the password does not have to sit in the client configuration:
 
 ```bash
 ./venv/Scripts/python.exe login.py
 ```
 
-Gdy logowanie hasłem odbije się od Cloudflare, skrypt przechodzi w tryb
-przeglądarkowy (wypisuje link, Ty wklejasz adres przekierowania).
+If the password login is rejected by Cloudflare, the script falls back to a
+browser mode (it prints a link, you open it, log in and paste back the redirect
+address).
 
-## Podłączenie do Claude'a
+## Connecting to Claude
 
 ```bash
-claude mcp add thermomix "<sciezka>\thermomix-mcp\venv\Scripts\python.exe" "<sciezka>\thermomix-mcp\server.py"
+claude mcp add thermomix "<path>\thermomix-mcp\venv\Scripts\python.exe" "<path>\thermomix-mcp\server.py"
 ```
 
-Albo wpisem w konfiguracji MCP:
+Or with an entry in the MCP configuration:
 
 ```json
 {
   "mcpServers": {
     "thermomix": {
-      "command": "<sciezka>\\thermomix-mcp\\venv\\Scripts\\python.exe",
-      "args": ["<sciezka>\\thermomix-mcp\\server.py"]
+      "command": "<path>\\thermomix-mcp\\venv\\Scripts\\python.exe",
+      "args": ["<path>\\thermomix-mcp\\server.py"]
     }
   }
 }
 ```
 
-## Narzędzia
+## Tools
 
-**Konto i urządzenie**
-
-| | |
-|---|---|
-| `account_status` | konto, subskrypcja, sparowane Thermomixy |
-| `cooking_status` | co TM robi teraz: krok, czas, temperatura (tylko odczyt) |
-
-**Przepisy**
+**Account and device**
 
 | | |
 |---|---|
-| `search_recipes` | szukanie w Cookidoo, domyślnie filtr na TM6 |
-| `recipe_details` | składniki, kroki, czasy, wartości odżywcze |
-| `my_recipes` | lista własnych przepisów |
-| `preview_recipe` | podgląd konwersji **bez wgrywania** |
-| `create_recipe` | wgranie przepisu na konto → TM6 |
-| `update_recipe` | zmiana istniejącego własnego przepisu |
-| `delete_recipe` | usunięcie (nieodwracalne) |
+| `account_status` | account, subscription, paired Thermomix devices |
+| `cooking_status` | what the device is doing now: step, time, temperature (read-only) |
 
-**Lista zakupów**
+**Recipes**
 
 | | |
 |---|---|
-| `shopping_list` | składniki, własne pozycje, przepisy na liście |
-| `add_recipes_to_shopping_list` | dorzuć składniki przepisów |
-| `add_shopping_items` | dorzuć własne pozycje |
-| `check_off_shopping_items` | odhacz / odznacz |
-| `clear_shopping_list` | wyczyść wszystko (nieodwracalne) |
+| `search_recipes` | search Cookidoo, filtered to TM6 by default |
+| `recipe_details` | ingredients, steps, times, nutrition |
+| `my_recipes` | list of your own recipes |
+| `preview_recipe` | preview of the conversion **without uploading** |
+| `create_recipe` | upload a recipe to the account → TM6 |
+| `update_recipe` | change an existing own recipe |
+| `delete_recipe` | delete (irreversible) |
+| `set_recipe_image` | set the cover image of an own recipe |
 
-**Planowanie**
+**Shopping list**
 
 | | |
 |---|---|
-| `week_plan` | „mój tydzień" |
-| `plan_recipes` | zaplanuj przepisy na dzień |
-| `collections` | kolekcje zapisane i własne |
+| `shopping_list` | ingredients, custom items, recipes on the list |
+| `add_recipes_to_shopping_list` | add the ingredients of recipes |
+| `add_shopping_items` | add custom items |
+| `check_off_shopping_items` | check / uncheck |
+| `remove_shopping_items` | remove items |
+| `clear_shopping_list` | clear everything (irreversible) |
+
+**Planning**
+
+| | |
+|---|---|
+| `week_plan` | "my week" |
+| `plan_recipes` | plan recipes for a day |
+| `unplan_recipes` | remove recipes from a day |
+| `collections` | saved and own collections |
 
 **Prompt**
 
-`convert_recipe` — reguły przerabiania klasycznego przepisu na ustawienia TM
-(posiekaj → 5 s/obr. 5, zeszklij → 3 min/120°C/obr. 1, duszenie w kawałkach →
-lewe obroty itd.), żeby konwersja była powtarzalna.
+`convert_recipe` holds the rules for turning a classic recipe into TM settings
+(chop → 5 s/speed 5, sauté → 3 min/120°C/speed 1, simmering pieces → reverse
+rotation, and so on), so the conversion is repeatable.
 
-## Format kroku
+## Step format
 
 ```python
 {
-  "text": "Dodaj dynię i bulion, gotuj",
-  "time": 1500,            # SEKUNDY
-  "temperature": 100,      # °C albo "varoma"
+  "text": "Add the pumpkin and stock, cook",
+  "time": 1500,            # SECONDS
+  "temperature": 100,      # °C or "varoma"
   "speed": "1",            # "soft", "0.5"–"10"
-  "direction": "CCW",      # lewe obroty (delikatne mieszanie)
-  "mode": "dough",         # nazwa i ikona trybu dopisuja sie same
-  "power": "Gentle",       # dla browning
-  "accessory": "Varoma",   # dla steaming
-  "ingredients": {"dynię": "600 g dyni, pokrojonej na kawałki"},
-  "slot": "25 min/100°C/obr. 1"   # opcjonalnie — inaczej dopisze się sam
+  "direction": "CCW",      # reverse rotation (gentle stirring)
+  "mode": "dough",         # mode name and icon are appended automatically
+  "power": "Gentle",       # for browning
+  "accessory": "Varoma",   # for steaming
+  "ingredients": {"pumpkin": "600 g pumpkin, cut into pieces"},
+  "slot": "25 min/100°C/speed 1"   # optional, otherwise generated
 }
 ```
 
-`ingredients` wiąże składnik użyty w kroku z dokładną pozycją z listy — to
-odpowiednik etapu „połącz składniki z krokami" w edytorze Cookidoo. Bez tego
-składniki nie są podświetlane podczas prowadzenia. Napis po prawej musi być
-identyczny z pozycją z listy `ingredients` przepisu, znak w znak.
+`ingredients` links an ingredient used in the step to the exact entry of the
+ingredient list. It is the equivalent of the "link ingredients to steps" stage
+in the Cookidoo editor. Without it, ingredients are not highlighted during
+guided cooking. The value must be identical to the entry in the recipe's `ingredients` list,
+character for character.
 
-Krok bez żadnych ustawień (`{"text": "Odstaw na 10 minut"}`) zostaje krokiem do
-przeczytania — i tak powinno być.
+A step without any settings (`{"text": "Leave for 10 minutes"}`) stays a step to
+read, which is how it should be.
 
-## Konwencje zapisu (ustalone z prawdziwych przepisów na koncie)
+## Notation conventions (derived from real recipes on the account)
 
-Serwer buduje frazy tak, jak robi to Cookidoo — nie wpisuj ich ręcznie:
+The server builds phrases the way Cookidoo does, so do not type them by hand:
 
 | | |
 |---|---|
-| sekundy | `3 s` (nie „3 sek") |
-| minuty | `5 min`, z sekundami `1 min 30 s` |
-| godziny | `1 godz.`, `1 godz. 35 min` — z kropką |
-| temperatura | `120°C`, albo `Varoma` |
-| lewe obroty | ikona `` jako osobny segment: `10 min/100°C//obr. 1` |
-| obroty | `obr. 2`; obroty delikatne jako ikona: `obr. ` (nie „soft") |
-| tryb | nazwa + ikona na początku frazy: `Ciasto /2 min` |
-| stopnie w danych | napis (`"120"`), nie liczba |
+| seconds | `3 s` |
+| minutes | `5 min`, with seconds `1 min 30 s` |
+| hours | `1 h`, `1 h 35 min` |
+| temperature | `120°C`, or `Varoma` |
+| reverse rotation | an icon as a separate segment, e.g. `10 min/100°C/<icon>/speed 1` |
+| speed | `speed 2`; gentle speed is an icon (not the word "soft") |
+| mode | name + icon at the start of the phrase, e.g. `Dough <icon>/2 min` |
+| values in the data | a string (`"120"`), not a number |
 
-Ikony pochodzą z fontu Cookidoo — w przeglądarce i na TM6 renderują się jako
-piktogramy, w surowym tekście to znaki z obszaru prywatnego Unicode. Tablica
-powstała ze skanu 120 przepisów platformy, nie z domysłów:
+The exact words depend on the account language (the examples above are
+generic). The icons come from the Cookidoo font: in a browser and on the TM6
+they render as pictograms, in raw text they are Unicode private-use characters.
+The table was built from a scan of 120 platform recipes, not from guesses:
 
-| tryb (`mode`) | fraza | źródło |
+| mode (`mode`) | phrase | source |
 |---|---|---|
-| `dough` | `Ciasto /2 min` | potwierdzony do końca — adnotacja `mode="dough"` leży na koncie |
-| `blend` | `Miksowanie /1 min` | odczytany z przepisów platformy |
-| `warm_up` | `Podgrzewanie /90°C/obr. 2` | odczytany z przepisów platformy |
-| `browning` | `Wysokie Temp. ` | ikona odczytana; TM6 nazywa ten tryb „Wysokie Temp." |
-| `turbo`, `steaming`, `rice_cooker` | sama nazwa, bez ikony | nie znalezione w żadnym przepisie |
+| `dough` | `Dough <icon>/2 min` | confirmed end to end, shown on a real TM6 |
+| `blend` | `Blend <icon>/1 min` | read from platform recipes |
+| `warm_up` | `Warm up <icon>/90°C/speed 2` | read from platform recipes |
+| `browning` | `High temp. <icon>` | icon read; the TM6 names this mode "High temp." |
+| `turbo`, `steaming`, `rice_cooker` | name only, no icon | not found in any recipe |
 
-Poza trybami z enuma biblioteki platforma używa też własnych: `Czajnik /100°C`,
-`Sous-vide /15 min/55°C`, `Gotowanie Jajek /miękkie`, `Krojenie /Grubo`,
-`Spiralizowanie ` oraz TM7-owe ` Otwarte Gotowanie/3 min/100°C` (tam ikona
-stoi **przed** nazwą). `cookidoo-api` nie ma dla nich kluczy, więc przez MCP są
-na razie niedostępne.
+Besides the modes in the library enum, the platform also uses its own: kettle,
+sous-vide, egg cooking, slicing, spiralizing, and the TM7 "open cooking" (where
+the icon comes **before** the name). `cookidoo-api` has no keys for them, so they
+are not available through MCP for now.
 
-Reguła, która odtwarza wszystkie zaobserwowane warianty: `<Nazwa> <ikona>`, a po
-niej zwykłe segmenty w kolejności czas / temperatura / lewe obroty / obroty.
-Zestaw 14 wzorców z platformy pilnuje tego w `tests/handshake.py` — gdy któryś
-padnie, przeczytaj przepis ze źródła i porównaj, nie poprawiaj „na oko".
+The rule that reproduces every observed variant: `<Name> <icon>`, followed by
+plain segments in the order time / temperature / reverse rotation / speed. A set
+of 14 platform patterns guards this in `tests/handshake.py`. When one fails,
+read the recipe from the source and compare, do not fix it by eye.
 
-Ustawienia kroku trzymane są wyłącznie jako adnotacja przypięta do frazy w
-tekście — pole `settings` zostaje puste, dokładnie jak w przepisach platformy.
+Step settings are stored only as an annotation attached to the phrase in the
+text. The `settings` field stays empty, exactly as in platform recipes.
 
-## Okładki przepisów
+## Recipe covers
 
-`set_recipe_image(recipe_id, file_path)` zamienia szary kafelek na zdjęcie.
-Przyjmuje JPG/PNG do 10 MB; najlepiej poziomy, proporcje ok. 4:3 (kafelek
-Cookidoo ma 584×480 i przycina brzegi). Obraz musi leżeć na dysku — API nie
-przyjmuje adresu URL, tylko ścieżkę do pliku, który już jest w magazynie
-Cookidoo, więc narzędzie najpierw go tam wgrywa (tak jak edytor na stronie),
-a potem podpina do przepisu. Kroki, składniki i adnotacje zostają nietknięte
-(sprawdzone porównaniem przepisu przed i po). Okładki trzymaj poza repozytorium.
+`set_recipe_image(recipe_id, file_path)` replaces the grey tile with a picture.
+It accepts JPG/PNG up to 10 MB, ideally landscape, about 4:3 (the Cookidoo tile
+is 584×480 and crops the edges). The image must be a file on disk: the API does
+not accept a URL, only a path to a file that is already in Cookidoo storage, so
+the tool uploads it there first (like the website editor does) and then attaches
+it to the recipe. Steps, ingredients and annotations stay untouched (checked by
+comparing the recipe before and after). Keep your cover images out of the
+repository.
 
-## Status weryfikacji
+## Verification status
 
-Sprawdzone:
+Checked:
 
-- handshake MCP po stdio, 20 narzędzi i prompt się rejestrują,
-- logowanie, token zapisuje się i odświeża sam,
-- odczyty na żywym koncie: `account_status` (TM6 sparowany, subskrypcja FULL),
-  `my_recipes`, `search_recipes` z filtrem TM6,
-- konwersja kroków → adnotacje guided cooking, zweryfikowana **przez porównanie
-  z prawdziwym przepisem z konta**: payload wychodzi strukturalnie identyczny
-  (`INGREDIENT` + `TTS`, pozycje, temperatura jako napis, ikona lewych obrotów),
-- offsety adnotacji przy polskich znakach i `°C` (liczone w UTF-16, trafiają
-  co do znaku),
-- czytelne komunikaty błędów zamiast „Error executing tool".
+- MCP handshake over stdio, 20 tools and the prompt register,
+- login, the token is saved and refreshed on its own,
+- reads on a live account: `account_status` (TM6 paired, subscription FULL),
+  `my_recipes`, `search_recipes` with the TM6 filter,
+- step conversion → guided-cooking annotations, verified **by comparison with a
+  real recipe from the account**: the payload comes out structurally identical
+  (`INGREDIENT` + `TTS`, positions, temperature as a string, reverse-rotation
+  icon),
+- annotation offsets with non-ASCII characters and `°C` (counted in UTF-16, they
+  hit the exact character),
+- readable error messages instead of "Error executing tool".
 
-**Potwierdzone na prawdziwym TM6** (wgrany przepis testowy):
+**Confirmed on a real TM6** (test recipes uploaded to the account):
 
-- przepis pojawia się w Utworzonych przepisach na urządzeniu,
-- TM6 pokazuje przycisk **ROZPOCZNIJ GOTOWANIE** — czyli uznaje przepis za
-  prowadzony, nie tekstowy,
-- kroki renderują się z ustawieniami: `5 s/obr. 5`, `3 min/120°C/obr. 1`,
-- **ikona lewych obrotów (``) wyświetla się poprawnie** w
-  `20 min/100°C/⟲/obr. 1`,
-- metadane (TM6, czas przygotowania, czas całkowity, porcje) i polskie znaki
-  w składnikach — bez zniekształceń,
-- `update_recipe` podmienia kroki w istniejącym przepisie.
+- the recipe appears in Created recipes on the device,
+- the TM6 shows the **START COOKING** button, so it treats the recipe as guided,
+  not as plain text,
+- steps render with settings: `5 s/speed 5`, `3 min/120°C/speed 1`,
+- the **reverse-rotation icon** displays correctly in `20 min/100°C/<icon>/speed 1`,
+- **dough mode** shows as "Mode > Dough" with a 2:00 timer, ready to start,
+- **gentle speed with reverse rotation** shows both icons in the step text, and
+  the manual settings screen shows 10:00 / 100°C with the reverse-rotation icon,
+- the **weighing screen** appears with the ingredient list and a TARE button when
+  ingredients are linked to the step,
+- metadata (TM6, preparation time, total time, servings) and non-ASCII
+  characters in ingredients, without distortion,
+- `update_recipe` replaces the steps in an existing recipe.
 
-### Remote monitoring nie działa na TM6
+### Remote monitoring does not work on the TM6
 
-`cooking_status` zwróci wyjaśnienie zamiast stanu gotowania. Podgląd gotowania
-przez Cookidoo to funkcja **TM7**; na TM6 odpowiednikiem jest czujnik Thermomix
-Sensor z aplikacją Cooking Center, do których to API nie sięga.
-`get_monitored_device_ids` zwraca pustą listę nawet przy włączonym, online TM6 —
-to prawidłowa odpowiedź, nie błąd.
+`cooking_status` returns an explanation instead of a cooking state. Cooking
+monitoring through Cookidoo is a **TM7** feature; on the TM6 the equivalent is
+the Thermomix Sensor with the Cooking Center app, which this API does not reach.
+`get_monitored_device_ids` returns an empty list even with a TM6 that is on and
+online. That is the correct answer, not an error.
 
-### Nadal niesprawdzone
+### Still unverified
 
-- które tryby (`mode`) przechodzą — Vorwerk sam zastrzega, że nie wszystkie
-  tryby Thermomixa są obsługiwane przy imporcie; przepis testowy ich nie używał,
-- narzędzia listy zakupów, kalendarza i kolekcji (cienkie opakowania na
-  bibliotekę, ale nieprzetestowane na żywym koncie).
+- the remaining modes (`mode`): Vorwerk itself states that not every Thermomix
+  mode is supported on import; only `dough` has been confirmed on a device,
+- the shopping list, calendar and collection tools (thin wrappers over the
+  library, not tested on a live account).
 
-## Zastrzeżenie
+## Disclaimer
 
-Oparte na nieoficjalnej bibliotece [`cookidoo-api`](https://github.com/miaucl/cookidoo-api).
-Projekt nie jest powiązany z Vorwerk ani Cookidoo i może przestać działać po
-zmianach po ich stronie. Tworzenie własnych przepisów wymaga aktywnej
-subskrypcji Cookidoo 3.0.
+Based on the unofficial library [`cookidoo-api`](https://github.com/miaucl/cookidoo-api).
+The project is not affiliated with Vorwerk or Cookidoo and may stop working after
+changes on their side. Creating custom recipes requires an active Cookidoo 3.0
+subscription.
